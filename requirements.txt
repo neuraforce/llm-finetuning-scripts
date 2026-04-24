@@ -1,0 +1,38 @@
+# Core fine-tuning stack
+# DGX Spark / B200 default: CUDA 13.0 PyTorch wheels.
+# NVIDIA's DGX Spark Unsloth guide expects CUDA 13.0; Unsloth's CUDA 13 docs
+# install PyTorch from the cu130 wheel index before installing Unsloth.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.10.0+cu130
+torchvision==0.25.0+cu130
+
+# Keep these aligned with environment.yml / ENVIRONMENT.md.
+bitsandbytes==0.49.2
+unsloth==2026.4.8
+unsloth_zoo==2026.4.9
+transformers==5.5.0
+trl==0.24.0
+peft>=0.13.0
+accelerate==1.12.0
+
+# Vision / multimodal
+pillow>=10.0.0
+
+# Data
+datasets==4.3.0
+pyyaml>=6.0
+
+# Logging
+tensorboard>=2.17.0
+
+# Utilities
+sentencepiece
+tiktoken
+einops
+
+# Evaluation
+numpy>=1.24.0
+rouge-score>=0.1.2
+tqdm>=4.66.0
+matplotlib>=3.8.0
+httpx>=0.27.0

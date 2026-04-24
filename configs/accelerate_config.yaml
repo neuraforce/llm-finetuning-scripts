@@ -1,0 +1,23 @@
+# Accelerate configuration for single-GPU training on DGX Spark (B200, 128 GB).
+#
+# Usage:
+#   accelerate launch --config_file configs/accelerate_config.yaml \
+#       scripts/train.py --config configs/full_ft_qwen3.yaml
+#
+# To reconfigure for your environment:
+#   accelerate config --config_file configs/accelerate_config.yaml
+
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: 'NO'
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+mixed_precision: bf16
+num_machines: 1
+num_processes: 1
+rdzv_backend: static
+same_network: true
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

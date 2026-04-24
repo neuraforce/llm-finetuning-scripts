@@ -1,0 +1,61 @@
+# LoRA fine-tuning configuration for Qwen 3.6 on DGX Spark
+
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"   # override on CLI: model.name=Qwen/Qwen3.6-27B
+  load_in_4bit: false                     # set true to reduce VRAM (unnecessary on 128 GB)
+  dtype: "bfloat16"
+  max_seq_length: 8192
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  # These target the language model layers only.
+  # To also fine-tune the vision encoder, add the relevant visual projection
+  # module names (e.g. "visual.merger.mlp.*" for Qwen2.5-VL).
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  use_rslora: true       # rank-stabilized LoRA (better than standard for high ranks)
+  use_gradient_checkpointing: "unsloth"  # Unsloth's patched implementation; faster than HF default
+
+data:
+  train_file: "data/train.jsonl"
+  eval_file: "data/eval.jsonl"   # optional; omit key to skip eval
+  dataset_format: "sharegpt"     # informational — always ShareGPT; format is not validated by code
+  max_samples: null              # null = use full dataset
+
+training:
+  output_dir: "outputs/lora_qwen3"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4   # effective batch = 16
+  warmup_ratio: 0.05
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  fp16: false
+  bf16: true
+  optim: "adamw_8bit"              # 8-bit Adam saves optimizer memory
+  logging_steps: 10
+  eval_steps: 200                  # ignored if eval_file is not set
+  save_steps: 500
+  save_total_limit: 3
+  # load_best_model_at_end: true  # keep checkpoint with lowest eval_loss; auto-aligns save_steps=eval_steps
+  # early_stopping_patience: 3    # stop if eval_loss doesn't improve for N consecutive evals
+  report_to: "tensorboard"
+  logging_dir: "outputs/lora_qwen3/runs"
+  dataloader_num_workers: 4
+  packing: true                    # sequence packing for higher GPU utilization
+  gradient_checkpointing: false    # handled by lora.use_gradient_checkpointing above
+  seed: 42
+
+export:
+  merge_adapter: true              # merge LoRA weights into base model after training
+  merged_output_dir: "outputs/lora_qwen3_merged"

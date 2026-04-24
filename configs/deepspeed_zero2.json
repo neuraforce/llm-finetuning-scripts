@@ -1,0 +1,27 @@
+{
+  "_comment": "DeepSpeed ZeRO-2 configuration for full fine-tuning on DGX Spark. Usage: set deepspeed: 'configs/deepspeed_zero2.json' in full_ft_qwen3.yaml, then: accelerate launch --config_file configs/accelerate_config.yaml scripts/train.py --config configs/full_ft_qwen3.yaml",
+  "zero_optimization": {
+    "stage": 2,
+    "offload_optimizer": {
+      "device": "none"
+    },
+    "allgather_partitions": true,
+    "allgather_bucket_size": 5e8,
+    "overlap_comm": true,
+    "reduce_scatter": true,
+    "reduce_bucket_size": 5e8,
+    "contiguous_gradients": true
+  },
+  "bf16": {
+    "enabled": true
+  },
+  "fp16": {
+    "enabled": false
+  },
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": 1.0,
+  "steps_per_print": 10,
+  "wall_clock_breakdown": false
+}

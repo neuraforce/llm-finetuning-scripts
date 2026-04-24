@@ -1,0 +1,46 @@
+# Training outputs and checkpoints
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data (keep example; ignore actual training data)
+data/*.jsonl
+!data/example_dataset.jsonl
+
+# Model weights (never commit)
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.gguf
+*.ggml
+*.ckpt
+
+# HuggingFace cache
+.cache/
+unsloth_compiled_cache/
+
+# Logs
+*.log
+runs/
+
+# OS
+.DS_Store
+Thumbs.db

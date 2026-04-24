@@ -1,0 +1,44 @@
+# Full fine-tuning configuration for Qwen 3.6 on DGX Spark (128 GB)
+
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"   # override on CLI: model.name=Qwen/Qwen3.6-27B
+  load_in_4bit: false
+  dtype: "bfloat16"
+  max_seq_length: 8192
+
+# No lora block – all model parameters are trained
+
+data:
+  train_file: "data/train.jsonl"
+  eval_file: "data/eval.jsonl"   # optional
+  dataset_format: "sharegpt"
+  # informational — always ShareGPT; format is not validated by code
+  max_samples: null
+
+training:
+  output_dir: "outputs/full_ft_qwen3"
+  num_train_epochs: 2
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8   # effective batch = 16
+  warmup_ratio: 0.03
+  learning_rate: 5.0e-6            # lower LR for full FT
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  fp16: false
+  bf16: true
+  optim: "adamw_8bit"
+  logging_steps: 10
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  report_to: "tensorboard"
+  logging_dir: "outputs/full_ft_qwen3/runs"
+  dataloader_num_workers: 4
+  packing: true
+  gradient_checkpointing: true     # recommended for full FT to manage activation memory
+  seed: 42
+
+# DeepSpeed ZeRO-2 is optional but helps with optimizer state offloading for large models.
+# To enable: accelerate launch --config_file configs/accelerate_config.yaml scripts/train.py ...
+# The deepspeed key is read by _build_sft_config() and passed to SFTConfig(deepspeed=...).
+deepspeed: null   # set to "configs/deepspeed_zero2.json" to enable

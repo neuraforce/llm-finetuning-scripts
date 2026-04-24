@@ -1,0 +1,62 @@
+# LoRA fine-tuning configuration for Qwen 3.6 — bewerbungen extraction task
+
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"   # override on CLI: model.name=Qwen/Qwen3.6-27B
+  load_in_4bit: false
+  dtype: "bfloat16"
+  max_seq_length: 8192
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  # These target the language model layers only.
+  # To also fine-tune the vision encoder, add the relevant visual projection
+  # module names (e.g. "visual.merger.mlp.*" for Qwen2.5-VL).
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  use_rslora: true
+  use_gradient_checkpointing: "unsloth"
+
+data:
+  train_file: "data/bewerbungen_train.jsonl"
+  eval_file: "data/bewerbungen_eval.jsonl"   # optional; omit key to skip eval
+  dataset_format: "sharegpt"
+  # informational — always ShareGPT; format is not validated by code
+  max_samples: null                           # null = use full dataset
+
+training:
+  output_dir: "outputs/lora_bewerbungen"
+  num_train_epochs: 5          # more epochs to compensate for the smaller dataset (~415 samples)
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4   # effective batch = 16
+  warmup_ratio: 0.05
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  fp16: false
+  bf16: true
+  optim: "adamw_8bit"
+  logging_steps: 10
+  eval_steps: 100              # smaller dataset → evaluate more frequently
+  save_steps: 200
+  save_total_limit: 3
+  load_best_model_at_end: true  # keep the checkpoint with lowest eval_loss
+  early_stopping_patience: 3   # stop if eval_loss doesn't improve for 3 consecutive evals
+  report_to: "tensorboard"
+  logging_dir: "outputs/lora_bewerbungen/runs"
+  dataloader_num_workers: 4
+  packing: true
+  gradient_checkpointing: false   # handled by lora.use_gradient_checkpointing above
+  seed: 42
+
+export:
+  merge_adapter: true
+  merged_output_dir: "outputs/lora_bewerbungen_merged"

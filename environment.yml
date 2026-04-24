@@ -1,0 +1,28 @@
+name: qwen-ft
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - --extra-index-url=https://download.pytorch.org/whl/cu130
+      - torch==2.10.0+cu130
+      - torchvision==0.25.0+cu130
+      - bitsandbytes==0.49.2
+      - unsloth==2026.4.8
+      - unsloth_zoo==2026.4.9
+      - transformers==5.5.0
+      - trl==0.24.0
+      - datasets==4.3.0
+      - accelerate==1.12.0
+      - pyyaml>=6.0
+      - pillow>=10.0.0
+      - tensorboard>=2.17.0
+      - sentencepiece
+      - tiktoken
+      - einops
+      - numpy>=1.24.0
+      - rouge-score>=0.1.2
+      - tqdm>=4.66.0
+      - matplotlib>=3.8.0
+      - httpx>=0.27.0
