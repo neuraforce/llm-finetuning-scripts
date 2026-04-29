@@ -1,6 +1,6 @@
 # LLM Fine-tuning Scripts
 
-Fine-tuning scripts for [Qwen 3.6](https://huggingface.co/Qwen) (vision, thinking, tool-calling) using [Unsloth](https://github.com/unslothai/unsloth) on a DGX Spark (128 GB GPU memory).
+Fine-tuning scripts for [Qwen 3.6](https://huggingface.co/Qwen) and derivatives (vision, thinking, tool-calling) using [Unsloth](https://github.com/unslothai/unsloth) on a DGX Spark (128 GB GPU memory).
 
 Supports **LoRA** and **full fine-tuning**, all via a single entry point.
 
@@ -292,6 +292,8 @@ Second answer.
 - The question line is prefixed with `> `.
 - The answer is all text after the question line until the next `--` or EOF.
 - Blank lines between question and answer are ignored.
+- With `--split`, train/eval splitting is done by document, not by Q&A row, so
+  all questions for a document stay in the same split.
 
 ### Option expansion (`{opt1, opt2, ...}`)
 
@@ -351,7 +353,8 @@ Each subdirectory is one training sample:
 
 The script warns and skips any folder that is missing either the `.md` or
 the `.json` file.  It also validates that ground-truth `.json` files contain
-the expected 10 fields with correct types, printing a warning for any anomaly.
+exactly the expected 10 fields with correct types, printing a warning and
+skipping invalid samples.
 
 ### Conversation format
 
@@ -506,7 +509,7 @@ no special decoding logic is required.
 ## Config Reference
 
 All configs (`lora_qwen3.yaml`, `lora_bewerbungen.yaml`, `lora_joint.yaml`,
-`full_ft_qwen3.yaml`) share the same top-level structure:
+`lora_huihui_fp8.yaml`, `full_ft_qwen3.yaml`) share the same top-level structure:
 
 | Section | Key | Description |
 |---|---|---|
@@ -514,15 +517,17 @@ All configs (`lora_qwen3.yaml`, `lora_bewerbungen.yaml`, `lora_joint.yaml`,
 | `model` | `max_seq_length` | Maximum token length |
 | `model` | `dtype` | `bfloat16` (standard) or `auto` (FP8 / quantized models) |
 | `model` | `load_in_4bit` | Enable 4-bit quantization (LoRA only; not needed on 128 GB) |
+| `model` | `offload_folder` | Optional disk offload directory for large MoE model loading |
 | `lora` | `r` | LoRA rank (LoRA configs only) |
 | `lora` | `lora_alpha` | LoRA scaling factor |
 | `lora` | `use_rslora` | Rank-stabilized LoRA (better for high ranks) |
 | `lora` | `target_modules` | List of module names to apply LoRA to |
 | `data` | `train_file` | Path to training JSONL |
 | `data` | `eval_file` | Path to eval JSONL (optional) |
-| `data` | `max_samples` | Limit dataset size (`null` = all) |
+| `data` | `max_samples` | Limit train and eval dataset size (`null` = all) |
 | `data` | `dataset_format` | Always `"sharegpt"` — informational only, not validated by code |
 | `training` | `output_dir` | Where to save checkpoints and final model |
+| `training` | `max_steps` | Optional hard stop for smoke tests (`-1` or omitted = use epochs) |
 | `training` | `report_to` | `tensorboard` (default; no wandb) |
 | `training` | `logging_dir` | TensorBoard log directory |
 | `training` | `packing` | Sequence packing for higher GPU utilisation |
@@ -539,6 +544,7 @@ llm-finetuning-scripts/
 │   ├── lora_qwen3.yaml              # LoRA hyperparameters (docs Q&A)
 │   ├── lora_bewerbungen.yaml        # LoRA hyperparameters (CV extraction)
 │   ├── lora_joint.yaml              # LoRA hyperparameters (joint training)
+│   ├── lora_huihui_fp8.yaml         # LoRA for Huihui-Qwen3.6-35B FP8 MoE
 │   └── full_ft_qwen3.yaml           # Full fine-tune hyperparameters
 ├── data/
 │   └── example_dataset.jsonl        # Reference dataset with all task types
@@ -553,6 +559,8 @@ llm-finetuning-scripts/
 │   ├── evaluate_bewerbungen.py      # Evaluate deployed model on CV extraction
 │   └── eval_metrics.py              # Metric helpers (ROUGE, exact match, token F1)
 ├── outputs/                         # Training checkpoints, eval logs, plots
+├── ENVIRONMENT.md                    # CUDA 13 environment notes
+├── environment.yml                   # Reproducible CUDA 13 environment
 ├── requirements.txt
 └── README.md
 ```
@@ -610,6 +618,69 @@ latency histogram).
 
 ---
 
+## Deployment (vLLM)
+
+### Starting the server
+
+Use `scripts/serve_vllm.sh` to start the vLLM OpenAI-compatible server:
+
+```bash
+# Base model only
+./scripts/serve_vllm.sh
+
+# With a LoRA adapter
+LORA_ADAPTER_PATH=/path/to/adapter ./scripts/serve_vllm.sh
+```
+
+Key environment variables (all optional, defaults shown):
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONTAINER_NAME` | `vllm-qwen3.6` | Docker container name |
+| `GPU_DEVICE` | `2` | CUDA device number |
+| `HOST_PORT` | `8002` | Host port (maps to container 8000) |
+| `HF_CACHE` | `/zfs/.cache/huggingface` | HuggingFace model cache |
+| `IMAGE` | `vllm/vllm-openai:v0.19.0` | vLLM Docker image |
+| `MODEL` | `edp1096/Huihui-Qwen3.6-35B-A3B-abliterated-FP8` | Model to serve |
+| `SERVED_MODEL_NAME` | `qwen3` | API model alias |
+| `MAX_MODEL_LEN` | `262144` | Max context length |
+| `LORA_ADAPTER_PATH` | _(empty)_ | Path to adapter dir; unset = no LoRA |
+| `LORA_NAME` | `cv-extraction` | Name to serve the LoRA under |
+
+### Dynamic LoRA loading
+
+If the server is already running with `--enable-lora` (set automatically
+when `LORA_ADAPTER_PATH` is passed to `serve_vllm.sh`), you can load or
+unload adapters at runtime without restarting:
+
+```bash
+# Load an adapter
+python scripts/load_lora.py load --name cv-extraction --path /path/to/adapter
+
+# Unload an adapter
+python scripts/load_lora.py unload --name cv-extraction
+
+# List currently available models/adapters
+python scripts/load_lora.py list
+```
+
+### JSON parsing
+
+All evaluation scripts use `scripts/json_utils.parse_llm_json()` which applies
+an 8-step recovery chain (think-block stripping → fence stripping → direct parse
+→ embedded-object extraction → trailing-comma removal → single-quote fix →
+brace balancing → optional `json_repair` library).  Import it in your own
+scripts:
+
+```python
+from json_utils import parse_llm_json
+
+result = parse_llm_json(raw_response)  # dict | None
+```
+
+---
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+

@@ -48,7 +48,6 @@ python scripts/prepare_docs_dataset.py --docs-dir ~/docs --output data/train.jso
 
 - **Model loader**: always use `unsloth.FastVisionModel` (not `AutoModelForCausalLM`) — it applies Qwen-specific patches for vision and thinking.
 - **LoRA detection**: `"lora" in cfg` — a config with a `lora:` block trains LoRA; without it, all weights are updated.
-- **CUDA stack**: dependency files target CUDA 13.0 on DGX Spark (`torch==2.10.0+cu130`, `torchvision==0.25.0+cu130`). Do not switch back to CUDA 12.x selectors.
 - **Precision**: `bf16=True` always; never `fp16` on B200/DGX Spark.
 - **Logging**: TensorBoard only (`report_to="tensorboard"`). Do not add wandb.
 - **Output**: local disk only. No HuggingFace Hub push.

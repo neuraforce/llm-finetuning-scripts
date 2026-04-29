@@ -75,7 +75,10 @@ def load_dataset_from_config(cfg: dict) -> tuple[Dataset | ConversationDataset, 
     if eval_file:
         eval_path = Path(eval_file)
         if eval_path.exists():
-            eval_ds = _make_dataset(load_jsonl(eval_path))
+            eval_records = load_jsonl(eval_path)
+            if max_samples is not None:
+                eval_records = eval_records[:max_samples]
+            eval_ds = _make_dataset(eval_records)
         else:
             warnings.warn(
                 f"eval_file '{eval_file}' not found — skipping evaluation.",
@@ -126,7 +129,15 @@ def make_formatting_func(tokenizer):
     """
     Return a formatting function bound to a tokenizer,
     suitable for passing to SFTTrainer(formatting_func=...).
+
+    Handles both single-example and batched calls:
+    - Single: example = {"conversations": [...]}
+    - Batched: example = {"conversations": [[...], [...]]}  (UnslothSFTTrainer)
     """
     def _fmt(example: dict) -> list[str]:
-        return [format_conversation_for_qwen(example.get("conversations", []), tokenizer)]
+        convs = example.get("conversations", [])
+        # UnslothSFTTrainer calls the formatter in batched mode: convs is a list of lists
+        if convs and isinstance(convs[0], list):
+            return [format_conversation_for_qwen(c, tokenizer) for c in convs]
+        return [format_conversation_for_qwen(convs, tokenizer)]
     return _fmt

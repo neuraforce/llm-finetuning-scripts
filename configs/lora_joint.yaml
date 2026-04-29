@@ -89,10 +89,11 @@ training:
   optim: "adamw_8bit"
   logging_steps: 10
   eval_steps: 200
-  save_steps: 500
-  save_total_limit: 3
+  save_steps: 100               # save a resumable checkpoint every N steps
+  save_total_limit: 3           # keep only the last N checkpoints to save disk space
   # load_best_model_at_end: true  # keep checkpoint with lowest eval_loss; auto-aligns save_steps=eval_steps
   # early_stopping_patience: 3    # stop if eval_loss doesn't improve for N consecutive evals
+  plot_every_steps: 50             # overwrite training_progress.png every N steps (0 = disable)
   report_to: "tensorboard"
   logging_dir: "outputs/lora_joint/runs"
   dataloader_num_workers: 4

@@ -447,10 +447,7 @@ def _write_summary(results: list[dict], log_path: Path) -> None:
 def main() -> None:
     args = _build_parser().parse_args()
     if args.concurrency < 1:
-        raise SystemExit("--concurrency must be greater than or equal to 1.")
-    if args.max_samples < 0:
-        raise SystemExit("--max-samples must be greater than or equal to 0.")
-
+        raise SystemExit("--concurrency must be >= 1")
     docs_dir = args.docs_dir.expanduser()
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -469,8 +466,6 @@ def main() -> None:
     print()
 
     tasks = _build_tasks(docs_dir, max_samples=args.max_samples)
-    if not tasks:
-        raise SystemExit("No evaluation tasks found; check --docs-dir and Q&A files.")
     print(f"Total samples to evaluate: {len(tasks)}")
     if args.max_samples:
         print(f"(capped at --max-samples {args.max_samples})")

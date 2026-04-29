@@ -31,6 +31,23 @@ import argparse
 from pathlib import Path
 
 
+def _resolve_dtype(dtype_str: str):
+    """Convert dtype string to torch dtype, or None for automatic loader dtype."""
+    if dtype_str == "auto" or dtype_str is None:
+        return None
+    import torch
+
+    dtype_map = {
+        "bfloat16": torch.bfloat16,
+        "float16": torch.float16,
+        "float32": torch.float32,
+    }
+    result = dtype_map.get(str(dtype_str))
+    if result is None:
+        raise ValueError(f"Unsupported dtype '{dtype_str}'. Use: bfloat16, float16, float32, or auto.")
+    return result
+
+
 def merge_and_save(model, tokenizer, output_dir: str) -> None:
     """
     Merge a loaded PEFT model's LoRA adapter into base weights and save.
@@ -59,7 +76,7 @@ def merge_from_disk(
     """
     from unsloth import FastVisionModel
 
-    resolved_dtype = None if dtype == "auto" else dtype
+    resolved_dtype = _resolve_dtype(dtype)
     print(f"Loading base model: {base_model} (dtype={dtype})")
     model, tokenizer = FastVisionModel.from_pretrained(
         model_name=base_model,

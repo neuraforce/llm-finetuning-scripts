@@ -30,7 +30,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -40,7 +39,7 @@ import httpx
 from tqdm.asyncio import tqdm as atqdm
 
 sys.path.insert(0, str(Path(__file__).parent))
-from eval_metrics import strip_thinking
+from json_utils import parse_llm_json
 from prepare_bewerbungen_dataset import FIELD_NAMES, SYSTEM_PROMPT, find_pairs
 
 # ---------------------------------------------------------------------------
@@ -49,14 +48,6 @@ from prepare_bewerbungen_dataset import FIELD_NAMES, SYSTEM_PROMPT, find_pairs
 
 #: Expected JSON fields, derived from the shared FIELD_DEFINITIONS source of truth.
 EXPECTED_FIELDS: list[str] = FIELD_NAMES
-
-
-def _strip_json_fence(text: str) -> str:
-    """Remove optional ```json / ``` markdown code fences from *text*."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return text.strip()
 
 
 def _compare_fields(predicted: dict, ground_truth: dict) -> dict:
@@ -269,10 +260,13 @@ async def _run_eval(
                             timeout=timeout,
                         )
                         try:
-                            response_text = strip_thinking(raw_response)
-                            predicted = json.loads(_strip_json_fence(response_text))
-                            parse_status = "ok"
-                        except json.JSONDecodeError:
+                            predicted = parse_llm_json(raw_response)
+                            if predicted is None:
+                                predicted = {}
+                                parse_status = "parse_error"
+                            else:
+                                parse_status = "ok"
+                        except Exception:  # noqa: BLE001
                             predicted = {}
                             parse_status = "parse_error"
 
@@ -423,10 +417,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _build_parser().parse_args()
     if args.concurrency < 1:
-        raise SystemExit("--concurrency must be greater than or equal to 1.")
-    if args.max_samples < 0:
-        raise SystemExit("--max-samples must be greater than or equal to 0.")
-
+        raise SystemExit("--concurrency must be >= 1")
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -441,9 +432,6 @@ def main() -> None:
         eval_file = args.eval_file.expanduser()
         tasks = _build_tasks_from_jsonl(eval_file, max_samples=args.max_samples)
         print(f"Eval file      : {eval_file}")
-
-    if not tasks:
-        raise SystemExit("No evaluation tasks found; check the input data.")
 
     print(f"Endpoint       : {args.endpoint}")
     print(f"Model          : {args.model}")

@@ -251,6 +251,23 @@ def convert(
             raise ValueError("output_path is required when dry_run=False")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    rng = random.Random(seed)
+    if split > 0.0:
+        shuffled_pairs = list(pairs)
+        rng.shuffle(shuffled_pairs)
+        n_eval_pairs = max(1, round(len(shuffled_pairs) * split))
+        eval_pairs = shuffled_pairs[:n_eval_pairs]
+        train_pairs = shuffled_pairs[n_eval_pairs:]
+        if not train_pairs:
+            print(
+                "Error: train split would be empty. Use a smaller --split or add more documents.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        train_pairs = list(pairs)
+        eval_pairs = []
+
     def _build_records(pair_list: list[tuple[Path, Path]]) -> list[dict]:
         records: list[dict] = []
         for md_path, txt_path in pair_list:
@@ -275,44 +292,27 @@ def convert(
             print(f"  {md_path.name}: {len(raw_samples)} Q&A pairs → {file_samples} samples")
         return records
 
-    if split > 0.0 and len(pairs) < 2:
-        raise ValueError("--split requires at least two .md/.txt pairs to keep train and eval non-empty")
-
-    if split > 0.0:
-        rng = random.Random(seed)
-        shuffled_pairs = list(pairs)
-        rng.shuffle(shuffled_pairs)
-        n_eval_pairs = max(1, round(len(shuffled_pairs) * split))
-        if n_eval_pairs >= len(shuffled_pairs):
-            raise ValueError("--split would leave no training documents; lower --split or add more pairs")
-        eval_pairs = shuffled_pairs[:n_eval_pairs]
-        train_pairs = shuffled_pairs[n_eval_pairs:]
-        train_records = _build_records(train_pairs)
-        eval_records = _build_records(eval_pairs)
-        rng.shuffle(train_records)
-        if not train_records:
-            raise ValueError("--split produced no training samples; check Q&A files or lower --split")
-        if not eval_records:
-            raise ValueError("--split produced no eval samples; check Q&A files or increase --split")
-        total = len(train_records) + len(eval_records)
-    else:
+    if dry_run:
         records = _build_records(pairs)
         if not records:
-            raise ValueError("No training samples produced; check Q&A files before writing output")
-        total = len(records)
-
-    if dry_run:
-        if split > 0.0:
-            print(
-                f"\nTotal: {total} samples from {len(pairs)} document(s) "
-                f"({len(train_records)} train, {len(eval_records)} eval; dry run)"
-            )
-        else:
-            print(f"\nTotal: {total} training samples from {len(pairs)} document(s)")
+            print("No training samples produced.", file=sys.stderr)
+            sys.exit(1)
+        print(f"\nTotal: {len(records)} training samples from {len(pairs)} document(s)")
         print("Dry run — no file written.")
         return
 
     if split > 0.0:
+        print("--- train documents ---")
+        train_records = _build_records(train_pairs)
+        print("--- eval documents ---")
+        eval_records = _build_records(eval_pairs)
+        if not train_records:
+            print("Error: train split produced no samples.", file=sys.stderr)
+            sys.exit(1)
+        if not eval_records:
+            print("Error: eval split produced no samples.", file=sys.stderr)
+            sys.exit(1)
+        rng.shuffle(train_records)
         n_train = len(train_records)
         n_eval = len(eval_records)
         eval_path = output_path.parent / (output_path.stem + "_eval" + output_path.suffix)
@@ -324,14 +324,18 @@ def convert(
             for r in eval_records:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-        print(f"\nTotal: {total} samples from {len(pairs)} document(s) (split by document, seed={seed})")
+        print(f"\nTotal: {n_train + n_eval} samples from {len(pairs)} document(s) (split seed={seed})")
         print(f"  Train ({n_train}): {output_path}")
         print(f"  Eval  ({n_eval}): {eval_path}")
     else:
+        records = _build_records(train_pairs)
+        if not records:
+            print("Error: no training samples produced.", file=sys.stderr)
+            sys.exit(1)
         with open(output_path, "w", encoding="utf-8") as f:
             for r in records:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
-        print(f"\nTotal: {total} training samples from {len(pairs)} document(s)")
+        print(f"\nTotal: {len(records)} training samples from {len(pairs)} document(s)")
         print(f"Written to {output_path}")
 
 
@@ -367,7 +371,7 @@ def main() -> None:
         default=0.0,
         metavar="RATIO",
         help=(
-            "Fraction of document pairs to hold out as an eval set (e.g. 0.1 for 10%%). "
+            "Fraction of samples to hold out as an eval set (e.g. 0.1 for 10%%). "
             "Writes an additional '<output-stem>_eval<suffix>' file alongside the main output. "
             "Requires --output. Default: 0.0 (no split)."
         ),

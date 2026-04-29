@@ -24,12 +24,8 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
 def strip_thinking(text: str) -> str:
-    """Remove closed or truncated <think> blocks from model output."""
-    text = _THINK_BLOCK.sub("", text)
-    start = re.search(r"<think>", text, flags=re.IGNORECASE)
-    if start:
-        text = text[:start.start()]
-    return text.strip()
+    """Remove <think>...</think> blocks from model output."""
+    return _THINK_BLOCK.sub("", text).strip()
 
 
 def normalize(text: str) -> str:

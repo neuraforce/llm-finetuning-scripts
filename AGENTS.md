@@ -29,8 +29,15 @@ python scripts/train.py --config configs/full_ft_qwen3.yaml
 # Override a config key inline
 python scripts/train.py --config configs/lora_qwen3.yaml training.num_train_epochs=5
 
+# Run a one-step smoke test
+python scripts/train.py --config configs/lora_qwen3.yaml training.max_steps=1
+
 # Train with a specific model (override placeholder)
 python scripts/train.py --config configs/lora_qwen3.yaml model.name=Qwen/Qwen3.6-27B
+
+# Train a large MoE model that needs disk offload during loading
+python scripts/train.py --config configs/lora_qwen3.yaml \
+    model.offload_folder=outputs/offload
 
 # Merge LoRA adapter into base model (BF16)
 python scripts/export_model.py \
@@ -81,7 +88,17 @@ python scripts/evaluate_model.py
 python scripts/evaluate_bewerbungen.py --bewerbungen-dir ~/bewerbungen
 ```
 
-No build step, no test suite to run — verify changes by doing a short training dry-run or by importing the affected module.
+No build step needed.  Run unit tests with:
+
+```bash
+python -m pytest tests/ -v
+```
+
+For a quick smoke test of script imports:
+
+```bash
+python -c "import sys; sys.path.insert(0,'scripts'); from json_utils import parse_llm_json; print('ok')"
+```
 
 ---
 
@@ -248,6 +265,31 @@ Question templates may contain `{opt1, opt2, ...}` blocks.  All combinations acr
 
 ---
 
+## Deployment
+
+```bash
+# Start vLLM (base model)
+./scripts/serve_vllm.sh
+
+# Start vLLM with LoRA adapter
+LORA_ADAPTER_PATH=/path/to/adapter ./scripts/serve_vllm.sh
+
+# Dynamically load a LoRA into a running server
+python scripts/load_lora.py load --name cv-extraction --path /path/to/adapter
+
+# Unload a LoRA
+python scripts/load_lora.py unload --name cv-extraction
+
+# List models/adapters
+python scripts/load_lora.py list
+```
+
+`serve_vllm.sh` starts the `vllm/vllm-openai:v0.19.0` Docker container with
+`--enable-lora --max-lora-rank 64` when `LORA_ADAPTER_PATH` is set; the adapter
+directory is bind-mounted read-only at `/lora-adapter`.
+
+---
+
 ## Key Conventions
 
 - **Config drives behaviour**: add new features via YAML config keys, not CLI flags (except `--config` and overrides).
@@ -261,6 +303,8 @@ Question templates may contain `{opt1, opt2, ...}` blocks.  All combinations acr
 - **Local output only**: no HuggingFace Hub push. Keep `push_to_hub=False` (default).
 - **`dataset_format` key is informational**: all configs declare `dataset_format: "sharegpt"` for documentation purposes; `dataset_utils.py` does not read or validate it — ShareGPT is always assumed.
 - **`DOCS_SYSTEM_PREAMBLE` is the single source of truth**: defined in `prepare_docs_dataset.py` and imported by `evaluate_model.py`. If changed, regenerate the training JSONL.
+- **`make_system_prompt()` is the single source of truth for the bewerbungen prompt**: defined in `prepare_bewerbungen_dataset.py`; `SYSTEM_PROMPT` is derived automatically — never hardcode the prompt elsewhere.
+- **`json_utils.parse_llm_json()`** is the standard way to parse LLM JSON responses in all evaluation/inference scripts. Never use bare `json.loads()` on raw LLM output.
 
 ---
 
